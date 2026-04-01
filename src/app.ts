@@ -1,19 +1,15 @@
-import express, { Application, Request, Response } from "express";
+import express from 'express';
+import cors from 'cors';
 
-const app: Application = express();
-const PORT = 3000;
+const app = express();
 
-// Middleware
+// Basic Middleware
+app.use(cors());
 app.use(express.json());
 
 // Test Route
-app.get("/", (req: Request, res: Response) => {
-  console.log("✅ GET / route hit!");
-  res.json({ message: "Real Estate Backend chal raha hai 🏠" });
+app.get('/', (req, res) => {
+  res.json({ message: 'Real Estate Backend API is running! 🚀' });
 });
 
-// Server Start
-app.listen(PORT, () => {
-  console.log(`🏠  Real Estate Backend`);
-
-});
+export default app;
