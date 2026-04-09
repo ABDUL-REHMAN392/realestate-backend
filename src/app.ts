@@ -2,12 +2,12 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes";
+import userRoutes from "./routes/user.routes";
 import {
   globalErrorHandler,
   handleMongooseErrors,
   AppError,
 } from "./utils/errorHandler";
-
 const app = express();
 
 // =============================================
@@ -44,7 +44,7 @@ app.get("/health", (_req: Request, res: Response) => {
 // API Routes
 // =============================================
 app.use("/api/v1/auth", authRoutes); // Register, Login, Refresh, Logout, ChangePassword
-
+app.use("/api/v1/users", userRoutes); // Profile, Avatar, Admin user management
 // =============================================
 // 404
 // =============================================
