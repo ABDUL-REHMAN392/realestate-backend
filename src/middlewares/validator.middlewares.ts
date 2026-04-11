@@ -195,3 +195,86 @@ export const propertyStatusSchema = z.object({
     error: "Status must be: active, sold, rented, or inactive",
   }),
 });
+// =============================================
+// AGENT Schemas 
+// =============================================
+
+export const createAgentProfileSchema = z.object({
+  bio: z
+    .string({ error: "Bio is required" })
+    .trim()
+    .min(20,   "Bio must be at least 20 characters")
+    .max(1000, "Bio cannot exceed 1000 characters"),
+
+  experience: z
+    .number({ error: "Years of experience is required" })
+    .int()
+    .min(0, "Experience cannot be negative")
+    .max(70, "Experience seems too high"),
+
+  licenseNumber: z
+    .string({ error: "License number is required" })
+    .trim()
+    .min(3, "License number must be at least 3 characters")
+    .max(50, "License number is too long"),
+
+  agencyName: z.string().trim().max(100).optional(),
+
+  city: z
+    .string({ error: "City is required" })
+    .trim()
+    .min(2, "City must be at least 2 characters")
+    .max(100, "City is too long"),
+
+  specializations: z
+    .array(z.string().trim().min(1))
+    .max(10, "Cannot exceed 10 specializations")
+    .default([]),
+
+  languages: z
+    .array(z.string().trim().min(1))
+    .max(10, "Cannot exceed 10 languages")
+    .default(["English"]),
+
+  whatsapp: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Please enter a valid WhatsApp number in international format")
+    .optional(),
+
+  website: z
+    .string()
+    .url("Please enter a valid website URL")
+    .optional(),
+});
+
+export const updateAgentProfileSchema = z.object({
+  bio:             z.string().trim().min(20).max(1000).optional(),
+  experience:      z.number().int().min(0).max(70).optional(),
+  agencyName:      z.string().trim().max(100).optional(),
+  city:            z.string().trim().min(2).max(100).optional(),
+  specializations: z.array(z.string().trim().min(1)).max(10).optional(),
+  languages:       z.array(z.string().trim().min(1)).max(10).optional(),
+  whatsapp:        z.string().regex(/^\+[1-9]\d{6,14}$/).optional(),
+  website:         z.string().url("Please enter a valid URL").optional(),
+}).refine(
+  (d) => Object.keys(d).some((k) => d[k as keyof typeof d] !== undefined),
+  { message: "Please provide at least one field to update" },
+);
+
+export const createReviewSchema = z.object({
+  rating: z
+    .number({ error: "Rating is required" })
+    .int()
+    .min(1, "Rating must be at least 1")
+    .max(5, "Rating cannot exceed 5"),
+
+  comment: z
+    .string({ error: "Comment is required" })
+    .trim()
+    .min(10,   "Comment must be at least 10 characters")
+    .max(1000, "Comment cannot exceed 1000 characters"),
+});
+
+export const verifyAgentSchema = z.object({
+  isVerified: z.boolean({ error: "isVerified must be true or false" }),
+});

@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import propertyRoutes from "./routes/property.routes";
+import agentRoutes from "./routes/agent.routes";
 import {
   globalErrorHandler,
   handleMongooseErrors,
@@ -47,6 +48,7 @@ app.get("/health", (_req: Request, res: Response) => {
 app.use("/api/v1/auth", authRoutes); // Register, Login, Refresh, Logout, ChangePassword
 app.use("/api/v1/users", userRoutes); // Profile, Avatar, Admin user management
 app.use("/api/v1/properties", propertyRoutes); // Property CRUD, Search, Images
+app.use("/api/v1/agents", agentRoutes); // Agent profiles, Reviews, Admin verify
 // =============================================
 // 404
 // =============================================
