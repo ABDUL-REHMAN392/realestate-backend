@@ -44,6 +44,21 @@ const avatarStorage = new CloudinaryStorage({
 });
 
 // =============================================
+// PROPERTY IMAGE Storage — realestate/properties
+// =============================================
+const propertyImageStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    // @ts-expect-error: multer-storage-cloudinary types are loose
+    folder: "realestate/properties",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [
+      { width: 1280, height: 960, crop: "limit", quality: "auto:good" },
+    ],
+  },
+});
+
+// =============================================
 // File Filter — images only
 // =============================================
 const imageFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
@@ -62,6 +77,12 @@ export const uploadAvatar = multer({
   storage: avatarStorage,
   fileFilter: imageFilter,
   limits: { fileSize: 2 * 1024 * 1024 },
+});
+
+export const uploadPropertyImage = multer({
+  storage: propertyImageStorage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per property image
 });
 
 // =============================================

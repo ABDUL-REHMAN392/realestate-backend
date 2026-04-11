@@ -67,3 +67,11 @@ export interface UserFilters {
   page?: number;
   limit?: number;
 }
+// =============================================
+// Property Types
+// =============================================
+export interface PropertyImagePayload {
+  url: string;
+  publicId: string;
+  isPrimary: boolean;
+}
