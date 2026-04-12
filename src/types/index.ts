@@ -113,3 +113,17 @@ export interface ChatFilters {
   page?: number;
   limit?: number;
 }
+
+// =============================================
+// Inquiry Types
+// =============================================
+export interface InquiryFilters {
+  status?: "pending" | "replied" | "closed";
+  page?: number;
+  limit?: number;
+}
+
+export interface AlertFilters {
+  page?: number;
+  limit?: number;
+}

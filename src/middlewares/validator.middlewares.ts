@@ -300,3 +300,29 @@ export const sendMessageSchema = z.object({
     .min(1, "Message cannot be empty")
     .max(2000, "Message cannot exceed 2000 characters"),
 });
+// =============================================
+// INQUIRY Schemas
+// =============================================
+export const sendInquirySchema = z.object({
+  propertyId: z
+    .string({ error: "propertyId is required" })
+    .min(1, "propertyId is required"),
+  message: z
+    .string({ error: "Message is required" })
+    .trim()
+    .min(10, "Message must be at least 10 characters")
+    .max(1000, "Message cannot exceed 1000 characters"),
+  phone: z
+    .string()
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Please enter a valid phone number (e.g. +923001234567)",
+    )
+    .optional(),
+});
+
+export const inquiryStatusSchema = z.object({
+  status: z.enum(["pending", "replied", "closed"], {
+    error: "Status must be: pending, replied, or closed",
+  }),
+});
