@@ -8,6 +8,7 @@ import agentRoutes from "./routes/agent.routes";
 import chatRoutes from "./routes/chat.routes";
 import inquiryRoutes from "./routes/inquiry.routes";
 import favoriteRoutes from "./routes/favorite.routes";
+import alertRoutes from "./routes/alert.routes";
 import {
   globalErrorHandler,
   handleMongooseErrors,
@@ -55,6 +56,7 @@ app.use("/api/v1/agents", agentRoutes); // Agent profiles, Reviews, Admin verify
 app.use("/api/v1/chat", chatRoutes); // Real-time Chat + WebSocket
 app.use("/api/v1/inquiries", inquiryRoutes); // Inquiry system
 app.use("/api/v1/favorites", favoriteRoutes); // Save properties
+app.use("/api/v1/alerts", alertRoutes); // Price alerts
 // =============================================
 // 404
 // =============================================

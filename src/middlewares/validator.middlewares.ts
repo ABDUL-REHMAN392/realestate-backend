@@ -326,3 +326,39 @@ export const inquiryStatusSchema = z.object({
     error: "Status must be: pending, replied, or closed",
   }),
 });
+
+// =============================================
+// PRICE ALERT Schemas
+// =============================================
+export const createPriceAlertSchema = z.object({
+  city: z
+    .string({ error: "City is required" })
+    .trim()
+    .min(2, "City must be at least 2 characters")
+    .max(100),
+  purpose: z.enum(["sale", "rent"], {
+    error: "Purpose must be 'sale' or 'rent'",
+  }),
+  type: z
+    .enum(["house", "apartment", "plot", "commercial", "villa"])
+    .optional(),
+  maxPrice: z
+    .number({ error: "maxPrice is required" })
+    .min(1, "Max price must be greater than 0"),
+  minBedrooms: z.number().int().min(0).optional(),
+});
+
+export const updatePriceAlertSchema = z
+  .object({
+    city: z.string().trim().min(2).max(100).optional(),
+    purpose: z.enum(["sale", "rent"]).optional(),
+    type: z
+      .enum(["house", "apartment", "plot", "commercial", "villa"])
+      .optional(),
+    maxPrice: z.number().min(1).optional(),
+    minBedrooms: z.number().int().min(0).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "Please provide at least one field to update",
+  });
