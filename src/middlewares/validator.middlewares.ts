@@ -196,14 +196,14 @@ export const propertyStatusSchema = z.object({
   }),
 });
 // =============================================
-// AGENT Schemas 
+// AGENT Schemas
 // =============================================
 
 export const createAgentProfileSchema = z.object({
   bio: z
     .string({ error: "Bio is required" })
     .trim()
-    .min(20,   "Bio must be at least 20 characters")
+    .min(20, "Bio must be at least 20 characters")
     .max(1000, "Bio cannot exceed 1000 characters"),
 
   experience: z
@@ -238,28 +238,33 @@ export const createAgentProfileSchema = z.object({
 
   whatsapp: z
     .string()
-    .regex(/^\+[1-9]\d{6,14}$/, "Please enter a valid WhatsApp number in international format")
+    .regex(
+      /^\+[1-9]\d{6,14}$/,
+      "Please enter a valid WhatsApp number in international format",
+    )
     .optional(),
 
-  website: z
-    .string()
-    .url("Please enter a valid website URL")
-    .optional(),
+  website: z.string().url("Please enter a valid website URL").optional(),
 });
 
-export const updateAgentProfileSchema = z.object({
-  bio:             z.string().trim().min(20).max(1000).optional(),
-  experience:      z.number().int().min(0).max(70).optional(),
-  agencyName:      z.string().trim().max(100).optional(),
-  city:            z.string().trim().min(2).max(100).optional(),
-  specializations: z.array(z.string().trim().min(1)).max(10).optional(),
-  languages:       z.array(z.string().trim().min(1)).max(10).optional(),
-  whatsapp:        z.string().regex(/^\+[1-9]\d{6,14}$/).optional(),
-  website:         z.string().url("Please enter a valid URL").optional(),
-}).refine(
-  (d) => Object.keys(d).some((k) => d[k as keyof typeof d] !== undefined),
-  { message: "Please provide at least one field to update" },
-);
+export const updateAgentProfileSchema = z
+  .object({
+    bio: z.string().trim().min(20).max(1000).optional(),
+    experience: z.number().int().min(0).max(70).optional(),
+    agencyName: z.string().trim().max(100).optional(),
+    city: z.string().trim().min(2).max(100).optional(),
+    specializations: z.array(z.string().trim().min(1)).max(10).optional(),
+    languages: z.array(z.string().trim().min(1)).max(10).optional(),
+    whatsapp: z
+      .string()
+      .regex(/^\+[1-9]\d{6,14}$/)
+      .optional(),
+    website: z.string().url("Please enter a valid URL").optional(),
+  })
+  .refine(
+    (d) => Object.keys(d).some((k) => d[k as keyof typeof d] !== undefined),
+    { message: "Please provide at least one field to update" },
+  );
 
 export const createReviewSchema = z.object({
   rating: z
@@ -271,10 +276,27 @@ export const createReviewSchema = z.object({
   comment: z
     .string({ error: "Comment is required" })
     .trim()
-    .min(10,   "Comment must be at least 10 characters")
+    .min(10, "Comment must be at least 10 characters")
     .max(1000, "Comment cannot exceed 1000 characters"),
 });
 
 export const verifyAgentSchema = z.object({
   isVerified: z.boolean({ error: "isVerified must be true or false" }),
+});
+// =============================================
+// CHAT Schemas
+// =============================================
+export const startConversationSchema = z.object({
+  userId: z
+    .string({ error: "userId is required" })
+    .min(1, "userId is required"),
+  propertyId: z.string().optional(),
+});
+
+export const sendMessageSchema = z.object({
+  text: z
+    .string({ error: "Message text is required" })
+    .trim()
+    .min(1, "Message cannot be empty")
+    .max(2000, "Message cannot exceed 2000 characters"),
 });

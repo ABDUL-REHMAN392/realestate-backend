@@ -106,3 +106,10 @@ export interface SafeAgent {
   totalReviews: number;
   totalListings: number;
 }
+// =============================================
+// Chat Types
+// =============================================
+export interface ChatFilters {
+  page?: number;
+  limit?: number;
+}

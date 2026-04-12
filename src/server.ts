@@ -3,6 +3,7 @@ dotenv.config();
 import http from "http";
 import app from "./app";
 import connectDB from "./config/db";
+import { initSocket } from "./socket/socket.handler";
 
 // =============================================
 // Uncaught Exception
@@ -19,6 +20,11 @@ const startServer = async (): Promise<void> => {
 
   const PORT = process.env.PORT || 5000;
   const httpServer = http.createServer(app);
+
+  // Socket.io initialize
+  initSocket(httpServer);
+  console.log("🔌 Socket.io initialized");
+
   httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
@@ -33,7 +39,7 @@ const startServer = async (): Promise<void> => {
 
   process.on("SIGTERM", () => {
     console.log("SIGTERM. Graceful shutdown...");
-    httpServer.close(() => console.log("Server band ho gaya."));
+    httpServer.close(() => console.log("Server has gone down"));
   });
 };
 
