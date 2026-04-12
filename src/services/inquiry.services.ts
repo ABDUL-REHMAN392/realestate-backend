@@ -1,13 +1,9 @@
 import mongoose from "mongoose";
-import { Inquiry, IInquiry } from "../models/inquiry.models";
+import Inquiry, { IInquiry } from "../models/inquiry.models";
 import Property from "../models/property.models";
 import { AppError } from "../utils/errorHandler";
 import { PaginationResult } from "../types";
 
-// =============================================
-// SEND INQUIRY
-// Buyer sends message about a property
-// =============================================
 export const sendInquiry = async (
   propertyId: string,
   senderId: string,
@@ -24,10 +20,7 @@ export const sendInquiry = async (
     throw new AppError("This property is no longer available", 400);
   }
   if (property.owner.toString() === senderId) {
-    throw new AppError(
-      "You cannot send an inquiry about your own property",
-      400,
-    );
+    throw new AppError("You cannot send an inquiry about your own property", 400);
   }
 
   const inquiry = await Inquiry.create({
@@ -47,9 +40,6 @@ export const sendInquiry = async (
   return populated!;
 };
 
-// =============================================
-// GET MY SENT INQUIRIES (buyer view)
-// =============================================
 export const getMySentInquiries = async (
   userId: string,
   page = 1,
@@ -72,9 +62,6 @@ export const getMySentInquiries = async (
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 };
 
-// =============================================
-// GET RECEIVED INQUIRIES (agent view)
-// =============================================
 export const getReceivedInquiries = async (
   agentId: string,
   status: string | undefined,
@@ -101,9 +88,6 @@ export const getReceivedInquiries = async (
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 };
 
-// =============================================
-// GET SINGLE INQUIRY
-// =============================================
 export const getInquiryById = async (
   inquiryId: string,
   userId: string,
@@ -121,20 +105,15 @@ export const getInquiryById = async (
 
   if (!inquiry) throw new AppError("Inquiry not found", 404);
 
-  // Only sender, receiving agent, or admin can view
   const isAllowed =
     userRole === "admin" ||
     inquiry.sender.toString() === userId ||
     inquiry.agent.toString() === userId;
 
   if (!isAllowed) throw new AppError("Access denied", 403);
-
   return inquiry;
 };
 
-// =============================================
-// UPDATE INQUIRY STATUS (agent / admin)
-// =============================================
 export const updateInquiryStatus = async (
   inquiryId: string,
   userId: string,
@@ -149,10 +128,7 @@ export const updateInquiryStatus = async (
   if (!inquiry) throw new AppError("Inquiry not found", 404);
 
   if (userRole !== "admin" && inquiry.agent.toString() !== userId) {
-    throw new AppError(
-      "Only the receiving agent or admin can update this inquiry",
-      403,
-    );
+    throw new AppError("Only the receiving agent or admin can update this inquiry", 403);
   }
 
   const updated = await Inquiry.findByIdAndUpdate(
@@ -167,9 +143,6 @@ export const updateInquiryStatus = async (
   return updated!;
 };
 
-// =============================================
-// DELETE INQUIRY (sender or admin)
-// =============================================
 export const deleteInquiry = async (
   inquiryId: string,
   userId: string,

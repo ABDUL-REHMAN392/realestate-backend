@@ -17,10 +17,6 @@ const toNum = (v: unknown, def: number): number => {
   return v !== undefined && v !== "" && !isNaN(n) ? n : def;
 };
 
-// =============================================
-// POST /api/v1/inquiries
-// Buyer sends inquiry about a property
-// =============================================
 export const sendInquiryHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
     const { propertyId, message, phone } = req.body as {
@@ -28,58 +24,39 @@ export const sendInquiryHandler = catchAsync(
       message: string;
       phone?: string;
     };
-
     const inquiry = await sendInquiry(
       propertyId,
       req.user!._id.toString(),
       message,
       phone,
     );
-
     sendSuccess(res, inquiry, "Inquiry sent successfully", 201);
   },
 );
 
-// =============================================
-// GET /api/v1/inquiries/sent
-// Buyer — my sent inquiries
-// =============================================
 export const getSentInquiriesHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
-    const page = toNum(req.query.page, 1);
-    const limit = toNum(req.query.limit, 10);
     const result = await getMySentInquiries(
       req.user!._id.toString(),
-      page,
-      limit,
+      toNum(req.query.page, 1),
+      toNum(req.query.limit, 10),
     );
     sendPaginated(res, result.data, result.total, result.page, result.limit);
   },
 );
 
-// =============================================
-// GET /api/v1/inquiries/received
-// Agent — inquiries I received
-// =============================================
 export const getReceivedInquiriesHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
-    const page = toNum(req.query.page, 1);
-    const limit = toNum(req.query.limit, 10);
-    const status = req.query.status as string | undefined;
     const result = await getReceivedInquiries(
       req.user!._id.toString(),
-      status,
-      page,
-      limit,
+      req.query.status as string | undefined,
+      toNum(req.query.page, 1),
+      toNum(req.query.limit, 10),
     );
     sendPaginated(res, result.data, result.total, result.page, result.limit);
   },
 );
 
-// =============================================
-// GET /api/v1/inquiries/:id
-// View single inquiry
-// =============================================
 export const getInquiryHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
     const inquiry = await getInquiryById(
@@ -91,10 +68,6 @@ export const getInquiryHandler = catchAsync(
   },
 );
 
-// =============================================
-// PATCH /api/v1/inquiries/:id/status
-// Agent updates inquiry status
-// =============================================
 export const updateStatusHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
     const inquiry = await updateInquiryStatus(
@@ -107,10 +80,6 @@ export const updateStatusHandler = catchAsync(
   },
 );
 
-// =============================================
-// DELETE /api/v1/inquiries/:id
-// Sender or admin deletes inquiry
-// =============================================
 export const deleteInquiryHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
     await deleteInquiry(

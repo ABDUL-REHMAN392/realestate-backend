@@ -1,14 +1,10 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-// =============================================
-// IInquiry
-// Buyer sends inquiry about a property to the agent
-// =============================================
 export interface IInquiry extends Document {
   _id: mongoose.Types.ObjectId;
   property: mongoose.Types.ObjectId;
-  sender: mongoose.Types.ObjectId; // buyer
-  agent: mongoose.Types.ObjectId; // property owner (agent)
+  sender: mongoose.Types.ObjectId;
+  agent: mongoose.Types.ObjectId;
   message: string;
   phone?: string;
   status: "pending" | "replied" | "closed";
@@ -43,7 +39,7 @@ const inquirySchema = new Schema<IInquiry>(
     phone: {
       type: String,
       trim: true,
-      default: null,
+      default: undefined,
     },
     status: {
       type: String,
@@ -58,4 +54,6 @@ inquirySchema.index({ property: 1 });
 inquirySchema.index({ sender: 1 });
 inquirySchema.index({ agent: 1, status: 1 });
 inquirySchema.index({ createdAt: -1 });
-export const Inquiry = mongoose.model<IInquiry>("Inquiry", inquirySchema);
+
+const Inquiry = mongoose.model<IInquiry>("Inquiry", inquirySchema);
+export default Inquiry;
