@@ -20,7 +20,10 @@ export const sendInquiry = async (
     throw new AppError("This property is no longer available", 400);
   }
   if (property.owner.toString() === senderId) {
-    throw new AppError("You cannot send an inquiry about your own property", 400);
+    throw new AppError(
+      "You cannot send an inquiry about your own property",
+      400,
+    );
   }
 
   const inquiry = await Inquiry.create({
@@ -105,10 +108,13 @@ export const getInquiryById = async (
 
   if (!inquiry) throw new AppError("Inquiry not found", 404);
 
+  const senderId =
+    (inquiry.sender as any)?._id?.toString() ?? inquiry.sender.toString();
+  const agentId =
+    (inquiry.agent as any)?._id?.toString() ?? inquiry.agent.toString();
+
   const isAllowed =
-    userRole === "admin" ||
-    inquiry.sender.toString() === userId ||
-    inquiry.agent.toString() === userId;
+    userRole === "admin" || senderId === userId || agentId === userId;
 
   if (!isAllowed) throw new AppError("Access denied", 403);
   return inquiry;
@@ -128,7 +134,10 @@ export const updateInquiryStatus = async (
   if (!inquiry) throw new AppError("Inquiry not found", 404);
 
   if (userRole !== "admin" && inquiry.agent.toString() !== userId) {
-    throw new AppError("Only the receiving agent or admin can update this inquiry", 403);
+    throw new AppError(
+      "Only the receiving agent or admin can update this inquiry",
+      403,
+    );
   }
 
   const updated = await Inquiry.findByIdAndUpdate(
