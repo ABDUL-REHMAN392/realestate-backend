@@ -5,6 +5,7 @@ import {
   getMessagesHandler,
   sendMessageHandler,
   markReadHandler,
+  editMessageHandler,
   deleteMessageHandler,
   getUnreadCountHandler,
 } from "../controllers/chat.controllers";
@@ -13,6 +14,7 @@ import {
   validate,
   startConversationSchema,
   sendMessageSchema,
+  editMessageSchema,
 } from "../middlewares/validator.middlewares";
 
 const router = Router();
@@ -50,8 +52,10 @@ router.patch("/conversations/:id/read", markReadHandler);
 // =============================================
 // MESSAGE ROUTES
 // =============================================
+// PATCH /api/v1/chat/messages/:id  — edit message (1 hour)
+router.patch("/messages/:id", validate(editMessageSchema), editMessageHandler);
 
-// DELETE /api/v1/chat/messages/:id  — apna message delete (5 min)
+// DELETE /api/v1/chat/messages/:id  — apna message delete (1 hour)
 router.delete("/messages/:id", deleteMessageHandler);
 
 // =============================================

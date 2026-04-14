@@ -248,6 +248,60 @@ export const initSocket = (httpServer: HttpServer): SocketServer => {
     });
 
     // ==================================================
+    // EDIT MESSAGE — real-time
+    // ==================================================
+    socket.on(
+      "message:edit",
+      async (data: { messageId: string; text: string }) => {
+        try {
+          const { messageId, text } = data ?? {};
+          if (!messageId || !text?.trim()) {
+            socket.emit("error:chat", {
+              message: "messageId and text required",
+            });
+            return;
+          }
+          if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            socket.emit("error:chat", { message: "Invalid messageId" });
+            return;
+          }
+          const message = await Message.findById(messageId);
+          if (!message) {
+            socket.emit("error:chat", { message: "Message not found" });
+            return;
+          }
+          if (message.sender.toString() !== userId) {
+            socket.emit("error:chat", {
+              message: "You can only edit your own messages",
+            });
+            return;
+          }
+          const oneHour = 60 * 60 * 1000;
+          if (Date.now() - message.createdAt.getTime() > oneHour) {
+            socket.emit("error:chat", {
+              message: "Edit window expired (1 hour)",
+            });
+            return;
+          }
+          message.text = text.trim();
+          message.isEdited = true;
+          message.editedAt = new Date();
+          await message.save();
+          const populated = await Message.findById(message._id)
+            .populate("sender", "name photo role")
+            .lean();
+          io.to(`conv:${message.conversation.toString()}`).emit(
+            "message:edited",
+            populated,
+          );
+        } catch (err) {
+          console.error("message:edit error:", err);
+          socket.emit("error:chat", { message: "Failed to edit message" });
+        }
+      },
+    );
+
+    // ==================================================
     // SEEN RECEIPT — mark messages as read
     // ==================================================
     socket.on("messages:read", async (data: { conversationId: string }) => {

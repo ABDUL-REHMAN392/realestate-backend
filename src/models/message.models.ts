@@ -50,15 +50,11 @@ const conversationSchema = new Schema<IConversation>(
 );
 
 // =============================================
-// Indexes — no deprecated options
+// Indexes
 // =============================================
 conversationSchema.index({ participants: 1 });
 conversationSchema.index({ lastMessageAt: -1 });
-// Prevent duplicate conversation between same pair for same property
-conversationSchema.index(
-  { participants: 1, property: 1 },
-  { unique: true, sparse: true },
-);
+conversationSchema.index({ participants: 1, property: 1 }, { unique: true });
 
 export const Conversation = mongoose.model<IConversation>(
   "Conversation",
@@ -75,6 +71,8 @@ export interface IMessage extends Document {
   text: string;
   isRead: boolean;
   readAt: Date | null;
+  isEdited: boolean;
+  editedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,6 +101,14 @@ const messageSchema = new Schema<IMessage>(
       default: false,
     },
     readAt: {
+      type: Date,
+      default: null,
+    },
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
       type: Date,
       default: null,
     },

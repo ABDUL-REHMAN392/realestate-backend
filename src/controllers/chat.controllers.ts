@@ -8,6 +8,7 @@ import {
   getMessages,
   sendMessage,
   markAsRead,
+  editMessage,
   deleteMessage,
   getTotalUnread,
 } from "../services/chat.services";
@@ -106,10 +107,26 @@ export const markReadHandler = catchAsync(
     sendSuccess(res, null, "Messages read mark ho gaye");
   },
 );
+// =============================================
+// PATCH /api/v1/chat/messages/:id
+// Edit own message (1 hour window)
+// =============================================
+export const editMessageHandler = catchAsync(
+  async (req: AuthRequest, res: Response) => {
+    const { text } = req.body as { text: string };
 
+    const message = await editMessage(
+      p(req.params.id),
+      req.user!._id.toString(),
+      text,
+    );
+
+    sendSuccess(res, message, "Message edited successfully");
+  },
+);
 // =============================================
 // DELETE /api/v1/chat/messages/:id
-// Delete own message (5 min window)
+// Delete own message (1 hour window)
 // =============================================
 export const deleteMessageHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {

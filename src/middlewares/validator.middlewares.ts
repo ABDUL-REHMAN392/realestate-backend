@@ -300,6 +300,12 @@ export const sendMessageSchema = z.object({
     .min(1, "Message cannot be empty")
     .max(2000, "Message cannot exceed 2000 characters"),
 });
+export const editMessageSchema = z.object({
+  text: z
+    .string({ error: "Text is required" })
+    .min(1, "Message cannot be empty")
+    .max(2000, "Message cannot exceed 2000 characters"),
+});
 // =============================================
 // INQUIRY Schemas
 // =============================================

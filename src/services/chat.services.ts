@@ -24,28 +24,42 @@ export const getOrCreateConversation = async (
     throw new AppError("Invalid property ID", 400);
   }
 
-  // Sort so [A, B] and [B, A] match the same document
   const sorted = [userId, otherUserId].sort();
 
-  const filter: Record<string, unknown> = {
-    participants: { $all: sorted, $size: 2 },
-    property: propertyId
-      ? new mongoose.Types.ObjectId(propertyId)
-      : null,
-  };
+  const propertyOid = propertyId
+    ? new mongoose.Types.ObjectId(propertyId)
+    : null;
 
-  // findOneAndUpdate with upsert — atomic, no race condition
-  const conversation = await Conversation.findOneAndUpdate(
-    filter,
-    { $setOnInsert: { participants: sorted, property: propertyId ?? null, unreadCount: {} } },
-    { upsert: true, new: true },
-  )
-    .populate("participants", "name photo role")
-    .populate("property", "title images address.city")
-    .populate({
-      path: "lastMessage",
-      populate: { path: "sender", select: "name photo" },
+  const populate = (q: mongoose.Query<any, any>) =>
+    q
+      .populate("participants", "name photo role")
+      .populate("property", "title images address.city")
+      .populate({
+        path: "lastMessage",
+        populate: { path: "sender", select: "name photo" },
+      });
+
+  // 1. Pehle dhundo
+  let conversation = await populate(
+    Conversation.findOne({
+      participants: { $all: sorted, $size: 2 },
+      property: propertyOid,
+    }),
+  ).lean<IConversation>();
+
+  // 2. Na mile toh banao
+  if (!conversation) {
+    const created = await Conversation.create({
+      participants: sorted,
+      property: propertyOid,
+      unreadCount: new Map(),
+      lastMessageAt: new Date(),
     });
+
+    conversation = (await populate(
+      Conversation.findById(created._id),
+    ).lean<IConversation>()) as IConversation;
+  }
 
   if (!conversation) {
     throw new AppError("Failed to create conversation", 500);
@@ -53,7 +67,6 @@ export const getOrCreateConversation = async (
 
   return conversation;
 };
-
 // =============================================
 // GET MY CONVERSATIONS — inbox list
 // =============================================
@@ -98,13 +111,13 @@ export const getMessages = async (
     throw new AppError("Invalid conversation ID", 400);
   }
 
-  const conv = await Conversation.findById(conversationId).lean<IConversation>();
+  const conv =
+    await Conversation.findById(conversationId).lean<IConversation>();
   if (!conv) throw new AppError("Conversation not found", 404);
 
-  const isParticipant = conv.participants.some(
-    (p) => p.toString() === userId,
-  );
-  if (!isParticipant) throw new AppError("Access denied to this conversation", 403);
+  const isParticipant = conv.participants.some((p) => p.toString() === userId);
+  if (!isParticipant)
+    throw new AppError("Access denied to this conversation", 403);
 
   const skip = (page - 1) * limit;
   const filter = { conversation: new mongoose.Types.ObjectId(conversationId) };
@@ -141,7 +154,8 @@ export const sendMessage = async (
   const isParticipant = conv.participants.some(
     (p) => p.toString() === senderId,
   );
-  if (!isParticipant) throw new AppError("Access denied to this conversation", 403);
+  if (!isParticipant)
+    throw new AppError("Access denied to this conversation", 403);
 
   // Save message
   const message = await Message.create({
@@ -190,9 +204,7 @@ export const markAsRead = async (
   const conv = await Conversation.findById(conversationId);
   if (!conv) throw new AppError("Conversation not found", 404);
 
-  const isParticipant = conv.participants.some(
-    (p) => p.toString() === userId,
-  );
+  const isParticipant = conv.participants.some((p) => p.toString() === userId);
   if (!isParticipant) throw new AppError("Access denied", 403);
 
   const now = new Date();
@@ -211,6 +223,54 @@ export const markAsRead = async (
   await Conversation.findByIdAndUpdate(conversationId, {
     $set: { [`unreadCount.${userId}`]: 0 },
   });
+};
+// =============================================
+// EDIT MESSAGE — sender only
+// =============================================
+export const editMessage = async (
+  messageId: string,
+  userId: string,
+  newText: string,
+): Promise<IMessage> => {
+  if (!mongoose.Types.ObjectId.isValid(messageId)) {
+    throw new AppError("Invalid message ID", 400);
+  }
+
+  if (!newText?.trim()) {
+    throw new AppError("Message text cannot be empty", 400);
+  }
+
+  if (newText.trim().length > 2000) {
+    throw new AppError("Message cannot exceed 2000 characters", 400);
+  }
+
+  const message = await Message.findById(messageId);
+  if (!message) throw new AppError("Message not found", 404);
+
+  if (message.sender.toString() !== userId) {
+    throw new AppError("You can only edit your own messages", 403);
+  }
+
+  // 1 hour window
+  const oneHour = 60 * 60 * 1000;
+  if (Date.now() - message.createdAt.getTime() > oneHour) {
+    throw new AppError(
+      "Messages can only be edited within 1 hour of sending",
+      400,
+    );
+  }
+
+  // Update
+  message.text = newText.trim();
+  message.isEdited = true;
+  message.editedAt = new Date();
+  await message.save();
+
+  const populated = await Message.findById(message._id)
+    .populate("sender", "name photo role")
+    .lean<IMessage>();
+
+  return populated!;
 };
 
 // =============================================
@@ -231,9 +291,12 @@ export const deleteMessage = async (
     throw new AppError("You can only delete your own messages", 403);
   }
 
-  const fiveMin = 5 * 60 * 1000;
-  if (Date.now() - message.createdAt.getTime() > fiveMin) {
-    throw new AppError("Messages can only be deleted within 5 minutes of sending", 400);
+  const oneHour = 60 * 60 * 1000;
+  if (Date.now() - message.createdAt.getTime() > oneHour) {
+    throw new AppError(
+      "Messages can only be deleted within 1 hour of sending",
+      400,
+    );
   }
 
   await message.deleteOne();
