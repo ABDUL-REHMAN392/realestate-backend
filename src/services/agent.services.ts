@@ -79,27 +79,32 @@ export const createAgentProfile = async (
   userId: string,
   data: CreateAgentProfileData,
 ): Promise<IAgent> => {
-  // Check user exists and has agent role
   const user = await User.findById(userId);
   if (!user) throw new AppError("User not found", 404);
-  if (user.role !== "agent") {
+
+  // ✅ BLOCK ADMIN
+  if (user.role === "admin") {
     throw new AppError(
-      "Only users with agent role can create an agent profile",
-      403,
+      "Admins cannot create agent profiles. Only buyers can apply for agent status.",
+      403
     );
   }
 
-  // One profile per user
+  // Check if already has agent profile
   const existing = await Agent.findOne({ user: userId });
-  if (existing) throw new AppError("You already have an agent profile", 409);
+  if (existing) {
+    throw new AppError("You already have an agent profile", 409);
+  }
 
-  // License must be unique
+  // Check license uniqueness
   const licenseExists = await Agent.findOne({
     licenseNumber: data.licenseNumber,
   });
-  if (licenseExists)
+  if (licenseExists) {
     throw new AppError("This license number is already registered", 409);
+  }
 
+  // Create agent profile (role stays "buyer" until admin approves)
   const agent = await Agent.create({
     user: userId,
     bio: data.bio,
@@ -111,12 +116,11 @@ export const createAgentProfile = async (
     languages: data.languages || ["English"],
     whatsapp: data.whatsapp,
     website: data.website,
-    isVerified: false, // admin approves
+    isVerified: false,  // Pending admin approval
   });
 
   return agent.populate("user", "name email photo phone");
 };
-
 // =============================================
 // GET ALL AGENTS — public directory
 // =============================================
@@ -261,16 +265,24 @@ export const verifyAgent = async (
     throw new AppError("Invalid agent ID", 400);
   }
 
-  const agent = await Agent.findByIdAndUpdate(
-    agentId,
-    { isVerified },
-    { returnDocument: "after" },
-  ).populate("user", "name email photo");
-
+  const agent = await Agent.findById(agentId).populate("user");
   if (!agent) throw new AppError("Agent profile not found", 404);
-  return agent;
-};
 
+  // ✅ Update agent verification status
+  agent.isVerified = isVerified;
+  await agent.save();
+
+  // ✅ Update user role based on verification
+  if (isVerified) {
+    // Admin approved → Make user an agent
+    await User.findByIdAndUpdate(agent.user, { role: "agent" });
+  } else {
+    // Admin rejected → Keep/revert to buyer
+    await User.findByIdAndUpdate(agent.user, { role: "buyer" });
+  }
+
+  return agent.populate("user", "name email photo");
+};
 // =============================================
 // DELETE AGENT PROFILE — Agent self or Admin
 // =============================================
@@ -286,13 +298,27 @@ export const deleteAgentProfile = async (
   const agent = await Agent.findById(agentId);
   if (!agent) throw new AppError("Agent profile not found", 404);
 
+  // ✅ Authorization check
   if (role !== "admin" && String(agent.user) !== userId) {
     throw new AppError("You can only delete your own agent profile", 403);
   }
 
-  await Agent.findByIdAndDelete(agentId);
-};
+  const agentUserId = String(agent.user);
 
+  // ✅ Delete agent profile
+  await Agent.findByIdAndDelete(agentId);
+
+  // ✅ REVERT USER ROLE TO BUYER
+  await User.findByIdAndUpdate(agentUserId, { 
+    role: "buyer" 
+  });
+
+  // Delete all their properties as well
+   await Property.deleteMany({ owner: agentUserId });
+
+  //  Delete all reviews for this agent
+   await Review.deleteMany({ agent: agentUserId });
+};
 // =============================================
 // ADD REVIEW
 // Buyer reviews an agent

@@ -60,7 +60,6 @@ router.use(protect);
 // POST /api/v1/agents/profile — create profile
 router.post(
   "/profile",
-  allowOnly("agent"),
   validate(createAgentProfileSchema),
   createProfile,
 );

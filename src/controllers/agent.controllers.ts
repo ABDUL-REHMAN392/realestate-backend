@@ -151,7 +151,7 @@ export const getAgentListings = catchAsync(
     const limit = req.query.limit ? Number(req.query.limit) : 10;
 
     const result = await agentService.getAgentListings(
-      String(agent.user),
+      String((agent.user as unknown as { _id: string })._id ?? agent.user),
       page,
       limit,
     );
@@ -231,7 +231,7 @@ export const addReview = catchAsync(
     const agent = await agentService.getAgentById(p(req.params.agentId));
 
     const review = await agentService.addReview(
-      String(agent.user), // agent's user._id
+      String((agent.user as unknown as { _id: string })._id ?? agent.user), // agent's user._id
       String(req.user!._id), // reviewer's user._id
       req.body,
     );
@@ -290,7 +290,7 @@ export const getAgentReviews = catchAsync(
     // agentId = agent profile _id
     const agent = await agentService.getAgentById(p(req.params.agentId));
 
-    const result = await agentService.getAgentReviews(String(agent.user), {
+    const result = await agentService.getAgentReviews(String((agent.user as unknown as { _id: string })._id ?? agent.user), {
       page: req.query.page ? Number(req.query.page) : 1,
       limit: req.query.limit ? Number(req.query.limit) : 10,
     });
