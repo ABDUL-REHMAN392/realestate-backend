@@ -7,6 +7,7 @@ import {
   createProperty,
   getProperties,
   getPropertyById,
+  getPropertyByIdNoView,
   updateProperty,
   deleteProperty,
   addPropertyImages,
@@ -18,17 +19,15 @@ import {
   PropertyFilters,
 } from "../services/property.services";
 
-// HELPER — parse numeric query param safely
 const toNum = (val: unknown): number | undefined => {
   const n = Number(val);
   return val !== undefined && val !== "" && !isNaN(n) ? n : undefined;
 };
 
-// HELPER — Express 5: req.params values are string | string[]
 const p = (v: string | string[]): string => (Array.isArray(v) ? v[0] : v);
 
 // =============================================
-// POST /api/v1/properties  — agent | admin
+// POST /api/v1/properties
 // =============================================
 export const createPropertyHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -38,10 +37,13 @@ export const createPropertyHandler = catchAsync(
 );
 
 // =============================================
-// GET /api/v1/properties  — public
+// GET /api/v1/properties
+// BUG FIX: admin sees all statuses by default
 // =============================================
 export const getPropertiesHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
+    const isAdmin = req.user?.role === "admin";
+
     const filters: PropertyFilters = {
       purpose: req.query.purpose as "sale" | "rent" | undefined,
       type: req.query.type as string | undefined,
@@ -59,14 +61,17 @@ export const getPropertiesHandler = catchAsync(
       page: toNum(req.query.page) ?? 1,
       limit: toNum(req.query.limit) ?? 10,
       sortBy: req.query.sortBy as PropertyFilters["sortBy"],
+      // Admin can filter by status explicitly
+      status: req.query.status as string | undefined,
     };
-    const result = await getProperties(filters);
+
+    const result = await getProperties(filters, isAdmin);
     sendPaginated(res, result.data, result.total, result.page, result.limit);
   },
 );
 
 // =============================================
-// GET /api/v1/properties/:id  — public
+// GET /api/v1/properties/:id
 // =============================================
 export const getPropertyHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -76,7 +81,7 @@ export const getPropertyHandler = catchAsync(
 );
 
 // =============================================
-// PATCH /api/v1/properties/:id  — owner | admin
+// PATCH /api/v1/properties/:id
 // =============================================
 export const updatePropertyHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -91,25 +96,33 @@ export const updatePropertyHandler = catchAsync(
 );
 
 // =============================================
-// DELETE /api/v1/properties/:id  — owner | admin
+// DELETE /api/v1/properties/:id
+// BUG FIX: getPropertyByIdNoView — no phantom view increment
 // =============================================
 export const deletePropertyHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
-    const property = await getPropertyById(p(req.params.id));
+    // BUG FIX: get property WITHOUT incrementing views
+    const property = await getPropertyByIdNoView(p(req.params.id));
+
+    // Delete Cloudinary images first
     await Promise.allSettled(
       property.images.map((img) => deleteFromCloudinary(img.publicId)),
     );
+
+    // deleteProperty also syncs agent listing count
     await deleteProperty(
       p(req.params.id),
       req.user!._id.toString(),
       req.user!.role,
     );
+
     sendSuccess(res, null, "Property deleted successfully");
   },
 );
 
 // =============================================
-// POST /api/v1/properties/:id/images  — agent | admin
+// POST /api/v1/properties/:id/images
+// BUG FIX: max 6 images enforced in service layer
 // =============================================
 export const addImagesHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -118,43 +131,50 @@ export const addImagesHandler = catchAsync(
       sendSuccess(res, null, "No images uploaded", 400);
       return;
     }
-    const images = files.map((file) => {
-      const f = file as Express.Multer.File & {
-        path: string;
-        filename: string;
-      };
-      return { url: f.path, publicId: f.filename, isPrimary: false };
+
+    const images = files.map((file, i) => {
+      const f = file as Express.Multer.File & { path: string; filename: string };
+      return { url: f.path, publicId: f.filename, isPrimary: false, order: i };
     });
+
     const property = await addPropertyImages(
       p(req.params.id),
       images,
       req.user!._id.toString(),
       req.user!.role,
     );
+
     sendSuccess(res, property, "Images added successfully");
   },
 );
 
 // =============================================
-// DELETE /api/v1/properties/:id/images/:publicId  — owner | admin
+// DELETE /api/v1/properties/:id/images/:publicId
+// BUG FIX: publicId decoded once here, once in service
 // =============================================
 export const deleteImageHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
     const id = p(req.params.id);
+    // publicId may contain slashes — decode it
     const publicId = decodeURIComponent(p(req.params.publicId));
+
+    // Delete from Cloudinary first
     await deleteFromCloudinary(publicId);
+
+    // Delete from DB — service also handles primary reassignment
     const property = await deletePropertyImage(
       id,
       publicId,
       req.user!._id.toString(),
       req.user!.role,
     );
+
     sendSuccess(res, property, "Image deleted successfully");
   },
 );
 
 // =============================================
-// PATCH /api/v1/properties/:id/images/:publicId/primary  — owner | admin
+// PATCH /api/v1/properties/:id/images/:publicId/primary
 // =============================================
 export const setPrimaryImageHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -169,7 +189,7 @@ export const setPrimaryImageHandler = catchAsync(
 );
 
 // =============================================
-// GET /api/v1/properties/my/listings  — logged in
+// GET /api/v1/properties/my/listings
 // =============================================
 export const getMyPropertiesHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -183,7 +203,7 @@ export const getMyPropertiesHandler = catchAsync(
 );
 
 // =============================================
-// PATCH /api/v1/properties/:id/featured  — admin only
+// PATCH /api/v1/properties/:id/featured — admin
 // =============================================
 export const toggleFeaturedHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {
@@ -197,7 +217,7 @@ export const toggleFeaturedHandler = catchAsync(
 );
 
 // =============================================
-// PATCH /api/v1/properties/:id/status  — admin only
+// PATCH /api/v1/properties/:id/status — admin
 // =============================================
 export const changeStatusHandler = catchAsync(
   async (req: AuthRequest, res: Response) => {

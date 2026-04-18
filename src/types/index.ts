@@ -74,6 +74,7 @@ export interface PropertyImagePayload {
   url: string;
   publicId: string;
   isPrimary: boolean;
+  order: number;
 }
 // =============================================
 // Agent Types

@@ -7,6 +7,7 @@ export interface IPropertyImage {
   url: string;
   publicId: string;
   isPrimary: boolean;
+  order: number; // for ordering images
 }
 
 // =============================================
@@ -19,10 +20,15 @@ export interface IProperty extends Document {
   type: "house" | "apartment" | "plot" | "commercial" | "villa";
   purpose: "sale" | "rent";
   price: number;
-  area: number; // sq ft
+  area: number;
   areaUnit: "sqft" | "sqm" | "marla" | "kanal";
   bedrooms?: number;
   bathrooms?: number;
+  // Extra real-world fields
+  floorNumber?: number;
+  totalFloors?: number;
+  yearBuilt?: number;
+  parkingSpaces?: number;
   features: string[];
   images: IPropertyImage[];
   address: {
@@ -34,7 +40,7 @@ export interface IProperty extends Document {
   };
   location: {
     type: "Point";
-    coordinates: [number, number]; // [lng, lat]
+    coordinates: [number, number];
   };
   owner: mongoose.Types.ObjectId;
   status: "active" | "sold" | "rented" | "inactive";
@@ -49,6 +55,7 @@ const propertyImageSchema = new Schema<IPropertyImage>(
     url: { type: String, required: true },
     publicId: { type: String, required: true },
     isPrimary: { type: Boolean, default: false },
+    order: { type: Number, default: 0 },
   },
   { _id: false },
 );
@@ -94,39 +101,31 @@ const propertySchema = new Schema<IProperty>(
       enum: ["sqft", "sqm", "marla", "kanal"],
       default: "sqft",
     },
-    bedrooms: {
+    bedrooms: { type: Number, min: [0, "Bedrooms cannot be negative"] },
+    bathrooms: { type: Number, min: [0, "Bathrooms cannot be negative"] },
+    floorNumber: { type: Number, min: [0, "Floor number cannot be negative"] },
+    totalFloors: { type: Number, min: [1, "Total floors must be at least 1"] },
+    yearBuilt: {
       type: Number,
-      min: [0, "Bedrooms cannot be negative"],
+      min: [1800, "Year built seems too old"],
+      max: [new Date().getFullYear() + 2, "Year built cannot be in far future"],
     },
-    bathrooms: {
-      type: Number,
-      min: [0, "Bathrooms cannot be negative"],
-    },
-    features: {
-      type: [String],
-      default: [],
-    },
+    parkingSpaces: { type: Number, min: [0, "Parking spaces cannot be negative"] },
+    features: { type: [String], default: [] },
     images: {
       type: [propertyImageSchema],
       default: [],
       validate: {
-        validator: (arr: IPropertyImage[]) => arr.length <= 15,
-        message: "A property can have at most 15 images",
+        // MAX 6 IMAGES
+        validator: (arr: IPropertyImage[]) => arr.length <= 6,
+        message: "A property can have at most 6 images",
       },
     },
     address: {
       street: { type: String, trim: true },
       city: { type: String, required: [true, "City is required"], trim: true },
-      state: {
-        type: String,
-        required: [true, "State/Province is required"],
-        trim: true,
-      },
-      country: {
-        type: String,
-        required: [true, "Country is required"],
-        trim: true,
-      },
+      state: { type: String, required: [true, "State/Province is required"], trim: true },
+      country: { type: String, required: [true, "Country is required"], trim: true },
       postalCode: { type: String, trim: true },
     },
     location: {
@@ -141,10 +140,8 @@ const propertySchema = new Schema<IProperty>(
         validate: {
           validator: (v: number[]) =>
             v.length === 2 &&
-            v[0] >= -180 &&
-            v[0] <= 180 &&
-            v[1] >= -90 &&
-            v[1] <= 90,
+            v[0] >= -180 && v[0] <= 180 &&
+            v[1] >= -90 && v[1] <= 90,
           message: "Coordinates must be [longitude, latitude] with valid range",
         },
       },
@@ -175,6 +172,8 @@ propertySchema.index({ price: 1 });
 propertySchema.index({ owner: 1 });
 propertySchema.index({ createdAt: -1 });
 propertySchema.index({ isFeatured: -1, createdAt: -1 });
+// Full-text search index — replaces slow $regex
+propertySchema.index({ title: "text", description: "text" });
 
 const Property = mongoose.model<IProperty>("Property", propertySchema);
 export default Property;

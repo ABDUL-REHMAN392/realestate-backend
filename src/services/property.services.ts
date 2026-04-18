@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Property, { IProperty, IPropertyImage } from "../models/property.models";
 import { AppError } from "../utils/errorHandler";
 import { PaginationResult } from "../types";
+import { syncAgentListingsCount } from "./agent.services";
 
 // =============================================
 // Filters Interface
@@ -17,10 +18,10 @@ export interface PropertyFilters {
   bedrooms?: number;
   bathrooms?: number;
   status?: string;
-  search?: string; // text search in title/description
-  lat?: number; // geospatial center
+  search?: string;
+  lat?: number;
   lng?: number;
-  radius?: number; // km
+  radius?: number;
   page?: number;
   limit?: number;
   sortBy?: "price_asc" | "price_desc" | "newest" | "oldest" | "views";
@@ -29,22 +30,26 @@ export interface PropertyFilters {
 // =============================================
 // Build Mongoose Filter Query
 // =============================================
-const buildQuery = (filters: PropertyFilters): Record<string, unknown> => {
+const buildQuery = (
+  filters: PropertyFilters,
+  isAdmin = false,
+): Record<string, unknown> => {
   const query: Record<string, unknown> = {};
 
-  // Only show active by default (unless admin sets status explicitly)
-  query.status = filters.status ?? "active";
+  // BUG FIX: Admin can see all statuses by default
+  // Non-admin always sees only active
+  if (!isAdmin) {
+    query.status = filters.status ?? "active";
+  } else if (filters.status) {
+    query.status = filters.status;
+  }
 
   if (filters.purpose) query.purpose = filters.purpose;
   if (filters.type) query.type = filters.type;
-  if (filters.city)
-    query["address.city"] = { $regex: new RegExp(filters.city, "i") };
-  if (filters.bedrooms !== undefined)
-    query.bedrooms = { $gte: filters.bedrooms };
-  if (filters.bathrooms !== undefined)
-    query.bathrooms = { $gte: filters.bathrooms };
+  if (filters.city) query["address.city"] = { $regex: new RegExp(filters.city, "i") };
+  if (filters.bedrooms !== undefined) query.bedrooms = { $gte: filters.bedrooms };
+  if (filters.bathrooms !== undefined) query.bathrooms = { $gte: filters.bathrooms };
 
-  // Price range
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
     const priceQuery: Record<string, number> = {};
     if (filters.minPrice !== undefined) priceQuery.$gte = filters.minPrice;
@@ -52,7 +57,6 @@ const buildQuery = (filters: PropertyFilters): Record<string, unknown> => {
     query.price = priceQuery;
   }
 
-  // Area range
   if (filters.minArea !== undefined || filters.maxArea !== undefined) {
     const areaQuery: Record<string, number> = {};
     if (filters.minArea !== undefined) areaQuery.$gte = filters.minArea;
@@ -60,24 +64,16 @@ const buildQuery = (filters: PropertyFilters): Record<string, unknown> => {
     query.area = areaQuery;
   }
 
-  // Text search
+  // Use $text search (full-text index) instead of slow $regex
   if (filters.search) {
-    query.$or = [
-      { title: { $regex: new RegExp(filters.search, "i") } },
-      { description: { $regex: new RegExp(filters.search, "i") } },
-    ];
+    query.$text = { $search: filters.search };
   }
 
-  // Geospatial — near a lat/lng within radius km
-  if (
-    filters.lat !== undefined &&
-    filters.lng !== undefined &&
-    filters.radius !== undefined
-  ) {
+  if (filters.lat !== undefined && filters.lng !== undefined && filters.radius !== undefined) {
     query.location = {
       $near: {
         $geometry: { type: "Point", coordinates: [filters.lng, filters.lat] },
-        $maxDistance: filters.radius * 1000, // km → meters
+        $maxDistance: filters.radius * 1000,
       },
     };
   }
@@ -90,28 +86,28 @@ const buildQuery = (filters: PropertyFilters): Record<string, unknown> => {
 // =============================================
 const buildSort = (sortBy?: string): Record<string, 1 | -1> => {
   switch (sortBy) {
-    case "price_asc":
-      return { price: 1 };
-    case "price_desc":
-      return { price: -1 };
-    case "oldest":
-      return { createdAt: 1 };
-    case "views":
-      return { views: -1 };
+    case "price_asc": return { price: 1 };
+    case "price_desc": return { price: -1 };
+    case "oldest": return { createdAt: 1 };
+    case "views": return { views: -1 };
     case "newest":
-    default:
-      return { createdAt: -1 };
+    default: return { createdAt: -1 };
   }
 };
 
 // =============================================
 // CREATE PROPERTY
+// BUG FIX: syncAgentListingsCount called after create
 // =============================================
 export const createProperty = async (
   data: Partial<IProperty>,
   ownerId: string,
 ): Promise<IProperty> => {
   const property = await Property.create({ ...data, owner: ownerId });
+
+  // Auto-sync agent listing count
+  await syncAgentListingsCount(ownerId);
+
   return property;
 };
 
@@ -120,12 +116,13 @@ export const createProperty = async (
 // =============================================
 export const getProperties = async (
   filters: PropertyFilters,
+  isAdmin = false,
 ): Promise<PaginationResult<IProperty>> => {
   const page = Math.max(1, filters.page ?? 1);
   const limit = Math.min(50, Math.max(1, filters.limit ?? 10));
   const skip = (page - 1) * limit;
 
-  const query = buildQuery(filters);
+  const query = buildQuery(filters, isAdmin);
   const sort = buildSort(filters.sortBy);
 
   const [data, total] = await Promise.all([
@@ -166,6 +163,24 @@ export const getPropertyById = async (id: string): Promise<IProperty> => {
 };
 
 // =============================================
+// GET SINGLE PROPERTY WITHOUT VIEW INCREMENT
+// Used internally (delete handler etc.)
+// =============================================
+export const getPropertyByIdNoView = async (id: string): Promise<IProperty> => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new AppError("Invalid property ID", 400);
+  }
+
+  const property = await Property.findById(id).populate(
+    "owner",
+    "name email photo phone role",
+  );
+
+  if (!property) throw new AppError("Property not found", 404);
+  return property;
+};
+
+// =============================================
 // UPDATE PROPERTY
 // =============================================
 export const updateProperty = async (
@@ -181,12 +196,10 @@ export const updateProperty = async (
   const property = await Property.findById(id);
   if (!property) throw new AppError("Property not found", 404);
 
-  // Only owner or admin can update
   if (property.owner.toString() !== userId && userRole !== "admin") {
     throw new AppError("You are not authorized to update this property", 403);
   }
 
-  // Prevent changing owner
   delete (data as Record<string, unknown>).owner;
   delete (data as Record<string, unknown>).views;
 
@@ -201,16 +214,18 @@ export const updateProperty = async (
 
 // =============================================
 // DELETE PROPERTY
+// BUG FIX: syncAgentListingsCount called after delete
 // =============================================
 export const deleteProperty = async (
   id: string,
   userId: string,
   userRole: string,
-): Promise<void> => {
+): Promise<{ ownerId: string; images: IPropertyImage[] }> => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new AppError("Invalid property ID", 400);
   }
 
+  // BUG FIX: Use findById directly — NOT getPropertyById which increments views
   const property = await Property.findById(id);
   if (!property) throw new AppError("Property not found", 404);
 
@@ -218,11 +233,20 @@ export const deleteProperty = async (
     throw new AppError("You are not authorized to delete this property", 403);
   }
 
+  const ownerId = property.owner.toString();
+  const images = [...property.images];
+
   await property.deleteOne();
+
+  // Auto-sync agent listing count
+  await syncAgentListingsCount(ownerId);
+
+  return { ownerId, images };
 };
 
 // =============================================
 // ADD IMAGES TO PROPERTY
+// BUG FIX: max 6 images enforced
 // =============================================
 export const addPropertyImages = async (
   id: string,
@@ -241,9 +265,11 @@ export const addPropertyImages = async (
     throw new AppError("Not authorized to update this property", 403);
   }
 
-  if (property.images.length + images.length > 15) {
+  const MAX_IMAGES = 6;
+
+  if (property.images.length + images.length > MAX_IMAGES) {
     throw new AppError(
-      `Cannot add ${images.length} image(s). Max 15 images allowed (currently ${property.images.length})`,
+      `Cannot add ${images.length} image(s). Max ${MAX_IMAGES} images allowed (currently ${property.images.length})`,
       400,
     );
   }
@@ -251,7 +277,14 @@ export const addPropertyImages = async (
   // If no images yet, first uploaded becomes primary
   if (property.images.length === 0 && images.length > 0) {
     images[0].isPrimary = true;
+    images[0].order = 0;
   }
+
+  // Set order for new images
+  const startOrder = property.images.length;
+  images.forEach((img, i) => {
+    img.order = startOrder + i;
+  });
 
   property.images.push(...images);
   await property.save();
@@ -260,6 +293,7 @@ export const addPropertyImages = async (
 
 // =============================================
 // DELETE SINGLE IMAGE FROM PROPERTY
+// BUG FIX: properly handles primary reassignment
 // =============================================
 export const deletePropertyImage = async (
   propertyId: string,
@@ -278,19 +312,29 @@ export const deletePropertyImage = async (
     throw new AppError("Not authorized to update this property", 403);
   }
 
+  // BUG FIX: decode the publicId to handle slashes (e.g. "realestate/properties/abc")
+  const decodedPublicId = decodeURIComponent(publicId);
+
   const imgIndex = property.images.findIndex(
-    (img) => img.publicId === publicId,
+    (img) => img.publicId === decodedPublicId,
   );
-  if (imgIndex === -1)
+
+  if (imgIndex === -1) {
     throw new AppError("Image not found on this property", 404);
+  }
 
   const wasPrimary = property.images[imgIndex].isPrimary;
   property.images.splice(imgIndex, 1);
 
-  // If deleted image was primary, assign next one
+  // Reassign primary if the deleted image was primary
   if (wasPrimary && property.images.length > 0) {
     property.images[0].isPrimary = true;
   }
+
+  // Re-normalize order values after deletion
+  property.images.forEach((img, i) => {
+    img.order = i;
+  });
 
   await property.save();
   return property;
@@ -316,7 +360,8 @@ export const setPrimaryImage = async (
     throw new AppError("Not authorized", 403);
   }
 
-  const found = property.images.find((img) => img.publicId === publicId);
+  const decodedPublicId = decodeURIComponent(publicId);
+  const found = property.images.find((img) => img.publicId === decodedPublicId);
   if (!found) throw new AppError("Image not found on this property", 404);
 
   property.images.forEach((img) => (img.isPrimary = false));
@@ -363,7 +408,6 @@ export const toggleFeatured = async (id: string): Promise<IProperty> => {
   }
   const property = await Property.findById(id);
   if (!property) throw new AppError("Property not found", 404);
-
   property.isFeatured = !property.isFeatured;
   await property.save();
   return property;

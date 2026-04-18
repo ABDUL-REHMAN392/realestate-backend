@@ -4,8 +4,6 @@ import { uploadAvatar, uploadPropertyImage } from "../utils/cloudinary";
 
 // =============================================
 // AVATAR Upload Middleware
-// POST /api/v1/users/me/avatar
-// Field name: 'avatar'
 // =============================================
 export const avatarUploadMiddleware = (
   req: Request,
@@ -14,9 +12,6 @@ export const avatarUploadMiddleware = (
 ): void => {
   uploadAvatar.single("avatar")(req, res, (err) => {
     if (err) {
-      console.error("🔴 Multer/Cloudinary upload error:", err);
-
-      // Multer-specific errors (file size, file type)
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
           res.status(400).json({
@@ -25,14 +20,9 @@ export const avatarUploadMiddleware = (
           });
           return;
         }
-        res.status(400).json({
-          success: false,
-          message: `Upload error: ${err.message}`,
-        });
+        res.status(400).json({ success: false, message: `Upload error: ${err.message}` });
         return;
       }
-
-      // Cloudinary or other errors
       res.status(400).json({
         success: false,
         message: err.message || "Image upload failed. Please try again.",
@@ -45,18 +35,16 @@ export const avatarUploadMiddleware = (
 
 // =============================================
 // PROPERTY IMAGES Upload Middleware
-// POST /api/v1/properties/:id/images
-// Field name: 'images' (up to 10 files)
+// BUG FIX: max 6 images (was 10 before)
 // =============================================
 export const propertyImagesUploadMiddleware = (
   req: Request,
   res: Response,
   next: NextFunction,
 ): void => {
-  uploadPropertyImage.array("images", 10)(req, res, (err) => {
+  // Max 6 per upload request — service layer enforces total max 6
+  uploadPropertyImage.array("images", 6)(req, res, (err) => {
     if (err) {
-      console.error("🔴 Property image upload error:", err);
-
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
           res.status(400).json({
@@ -68,17 +56,13 @@ export const propertyImagesUploadMiddleware = (
         if (err.code === "LIMIT_FILE_COUNT") {
           res.status(400).json({
             success: false,
-            message: "You can upload at most 10 images at once",
+            message: "You can upload at most 6 images at once",
           });
           return;
         }
-        res.status(400).json({
-          success: false,
-          message: `Upload error: ${err.message}`,
-        });
+        res.status(400).json({ success: false, message: `Upload error: ${err.message}` });
         return;
       }
-
       res.status(400).json({
         success: false,
         message: err.message || "Image upload failed. Please try again.",
