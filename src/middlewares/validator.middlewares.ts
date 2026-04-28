@@ -380,3 +380,32 @@ export const updatePriceAlertSchema = z
   .refine((d) => Object.values(d).some((v) => v !== undefined), {
     message: "Please provide at least one field to update",
   });
+// =============================================
+// BOOKING Schemas  
+// =============================================
+export const createBookingSchema = z.object({
+  propertyId: z.string({ error: "propertyId is required" }).min(1),
+  date: z
+    .string({ error: "Visit date is required" })
+    .min(1, "Visit date is required"),
+  timeSlot: z.enum(
+    [
+      "09:00 AM","10:00 AM","11:00 AM","12:00 PM",
+      "01:00 PM","02:00 PM","03:00 PM","04:00 PM","05:00 PM","06:00 PM",
+    ],
+    { error: "Please select a valid time slot" },
+  ),
+  note: z.string().trim().max(500).optional(),
+});
+ 
+export const confirmBookingSchema = z.object({
+  agentNote: z.string().trim().max(500).optional(),
+});
+ 
+export const rejectBookingSchema = z.object({
+  rejectionReason: z
+    .string({ error: "Rejection reason is required" })
+    .trim()
+    .min(5, "Rejection reason must be at least 5 characters")
+    .max(500),
+});
