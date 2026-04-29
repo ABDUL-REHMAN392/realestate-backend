@@ -25,7 +25,7 @@ const setAuthCookies = (
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: 15 * 60 * 1000, // 15 minutes
   });
 
@@ -136,7 +136,7 @@ export const logout = catchAsync(
     res.clearCookie("accessToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
     });
 
     sendSuccess(res, null, "Logged out successfully. Goodbye!");
@@ -166,13 +166,50 @@ export const changePassword = catchAsync(
     res.clearCookie("accessToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
     });
 
     sendSuccess(
       res,
       null,
       "Password changed successfully. Please log in again.",
+    );
+  },
+);
+
+// =============================================
+// OAUTH LOGIN
+// POST /api/v1/auth/oauth
+// Called by NextAuth after provider callback
+// Body: { provider, providerAccountId, email, name, photo }
+// =============================================
+export const oauthLogin = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+    const { provider, providerAccountId, email, name, photo } = req.body;
+
+    if (!provider || !email || !name) {
+      res.status(400).json({ success: false, message: "provider, email and name are required" });
+      return;
+    }
+
+    const result = await authService.oauthLogin({
+      provider,
+      providerAccountId,
+      email,
+      name,
+      photo,
+    });
+
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+
+    sendSuccess(
+      res,
+      {
+        accessToken:  result.accessToken,
+        refreshToken: result.refreshToken,
+        user:         result.user,
+      },
+      "OAuth login successful",
     );
   },
 );

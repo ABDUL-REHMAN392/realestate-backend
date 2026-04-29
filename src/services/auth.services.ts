@@ -11,22 +11,23 @@ import { AuthResult, TokenPair } from "../types";
 // Format user for response — strip sensitive fields
 // =============================================
 const formatUser = (user: IUser) => ({
-  id: user._id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  photo: user.photo || null,
+  id:          user._id,
+  name:        user.name,
+  email:       user.email,
+  role:        user.role,
+  photo:       user.photo || null,
+  isOAuthUser: user.isOAuthUser, // ← frontend ko pata chale OAuth user hai
 });
 
 // =============================================
 // Generate both tokens + save refresh in DB
 // =============================================
 const generateAndSaveTokens = async (user: IUser): Promise<TokenPair> => {
-  const accessToken = generateAccessToken(user._id, user.role);
+  const accessToken  = generateAccessToken(user._id, user.role);
   const refreshToken = generateRefreshToken(user._id);
 
   user.refreshToken = refreshToken;
-  user.lastLogin = new Date();
+  user.lastLogin    = new Date();
   await user.save({ validateBeforeSave: false });
 
   return { accessToken, refreshToken };
@@ -36,11 +37,11 @@ const generateAndSaveTokens = async (user: IUser): Promise<TokenPair> => {
 // REGISTER
 // =============================================
 export const registerUser = async (data: {
-  name: string;
-  email: string;
-  password: string;
-  phone?: string;
-  role?: "buyer" | "agent";
+  name:      string;
+  email:     string;
+  password:  string;
+  phone?:    string;
+  role?:     "buyer" | "agent";
 }): Promise<AuthResult> => {
   const existing = await User.findOne({ email: data.email });
   if (existing) {
@@ -48,15 +49,15 @@ export const registerUser = async (data: {
   }
 
   const user = await User.create({
-    name: data.name,
-    email: data.email,
+    name:         data.name,
+    email:        data.email,
     passwordHash: data.password, // pre-save hook will hash it
-    phone: data.phone,
-    role: data.role || "buyer",
+    phone:        data.phone,
+    role:         data.role || "buyer",
+    isOAuthUser:  false,
   });
 
   const tokens = await generateAndSaveTokens(user);
-
   return { user: formatUser(user), ...tokens };
 };
 
@@ -64,7 +65,7 @@ export const registerUser = async (data: {
 // LOGIN
 // =============================================
 export const loginUser = async (
-  email: string,
+  email:    string,
   password: string,
 ): Promise<AuthResult> => {
   const user = await User.findOne({ email }).select(
@@ -83,7 +84,6 @@ export const loginUser = async (
   }
 
   const tokens = await generateAndSaveTokens(user);
-
   return { user: formatUser(user), ...tokens };
 };
 
@@ -104,8 +104,7 @@ export const refreshTokens = async (
     throw new AppError("Invalid session. Please log in again", 401);
   }
 
-  // Token rotation — issue new pair
-  const accessToken = generateAccessToken(user._id, user.role);
+  const accessToken  = generateAccessToken(user._id, user.role);
   const refreshToken = generateRefreshToken(user._id);
 
   user.refreshToken = refreshToken;
@@ -123,20 +122,64 @@ export const logoutUser = async (userId: string): Promise<void> => {
 
 // =============================================
 // CHANGE PASSWORD
+// OAuth users ke liye block
 // =============================================
 export const changeUserPassword = async (
-  userId: string,
+  userId:          string,
   currentPassword: string,
-  newPassword: string,
+  newPassword:     string,
 ): Promise<void> => {
   const user = await User.findById(userId).select("+passwordHash");
   if (!user) throw new AppError("User not found", 404);
 
+  // OAuth user password change nahi kar sakta
+  if (user.isOAuthUser) {
+    throw new AppError(
+      "OAuth accounts (Google/Facebook) cannot change password. Please use your provider's settings.",
+      400,
+    );
+  }
+
   const isMatch = await user.comparePassword(currentPassword);
   if (!isMatch) throw new AppError("Current password is incorrect", 401);
 
-  // Update password + invalidate all sessions
   user.passwordHash = newPassword; // pre-save hook will hash it
   user.refreshToken = undefined;
   await user.save();
+};
+
+// =============================================
+// OAUTH LOGIN / REGISTER (Google & Facebook)
+// =============================================
+export const oauthLogin = async (data: {
+  provider:          "google" | "facebook";
+  providerAccountId: string;
+  email:             string;
+  name:              string;
+  photo?:            string;
+}): Promise<AuthResult> => {
+  let user = await User.findOne({ email: data.email });
+
+  if (user) {
+    if (!user.photo && data.photo) {
+      user.photo = data.photo;
+      await user.save({ validateBeforeSave: false });
+    }
+    if (!user.isActive) {
+      throw new AppError("Your account has been suspended. Contact support.", 403);
+    }
+  } else {
+    // ✅ isOAuthUser: true — yeh field deletion check mein kaam aayegi
+    user = await User.create({
+      name:        data.name,
+      email:       data.email,
+      passwordHash: "",        // OAuth users ka password nahi hota — empty string
+      photo:       data.photo || undefined,
+      role:        "buyer",
+      isOAuthUser: true,       // ← KEY: is field se pata chalega OAuth user hai
+    });
+  }
+
+  const tokens = await generateAndSaveTokens(user);
+  return { user: formatUser(user), ...tokens };
 };

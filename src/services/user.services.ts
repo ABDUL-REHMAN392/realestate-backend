@@ -21,8 +21,6 @@ export const getProfile = (user: IUser): SafeUser => formatUser(user);
 
 // =============================================
 // UPDATE PROFILE
-// Only updates fields that are present AND non-empty
-// Empty string "" is treated as "not provided"
 // =============================================
 export const updateProfile = async (
   userId:  string,
@@ -48,12 +46,11 @@ export const updateProfile = async (
   );
 
   if (!user) throw new AppError('User not found', 404);
-  return formatUser(user);   // ✅ clean response — no __v, passwordChangedAt etc
+  return formatUser(user);
 };
 
 // =============================================
 // UPDATE AVATAR
-// Deletes old Cloudinary image before saving new
 // =============================================
 export const updateAvatar = async (
   userId:       string,
@@ -91,31 +88,46 @@ export const removeAvatar = async (userId: string): Promise<void> => {
 
 // =============================================
 // DELETE ACCOUNT
-// Steps:
-//   1. Verify password (safety check)
-//   2. Delete avatar from Cloudinary (if any)
-//   3. Hard delete user from DB
+//
+// Do cases:
+//   1. Normal user  → password confirm zaroori hai
+//   2. OAuth user   → password nahi hota, seedha delete
 // =============================================
 export const deleteAccount = async (
-  userId:   string,
-  password: string,
+  userId:    string,
+  password?: string,   // ← optional — OAuth ke liye nahi chahiye
 ): Promise<void> => {
   const user = await User
     .findById(userId)
-    .select('+passwordHash +photoPublicId');
+    .select('+passwordHash +photoPublicId +isOAuthUser');
 
   if (!user) throw new AppError('User not found', 404);
 
-  // Must confirm with password before deletion
-  const isMatch = await user.comparePassword(password);
-  if (!isMatch) throw new AppError('Incorrect password. Account deletion cancelled', 401);
+  // ─── OAuth user ────────────────────────────────────────
+  // Google/Facebook se aaye hain — password check skip
+  if (user.isOAuthUser) {
+    if (user.photoPublicId) {
+      await deleteFromCloudinary(user.photoPublicId);
+    }
+    await User.findByIdAndDelete(userId);
+    return;
+  }
 
-  // Cleanup Cloudinary avatar
+  // ─── Normal (credentials) user ─────────────────────────
+  // Password confirm karna zaroori hai
+  if (!password) {
+    throw new AppError('Please provide your password to confirm account deletion', 400);
+  }
+
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch) {
+    throw new AppError('Incorrect password. Account deletion cancelled', 401);
+  }
+
   if (user.photoPublicId) {
     await deleteFromCloudinary(user.photoPublicId);
   }
 
-  // Hard delete from DB
   await User.findByIdAndDelete(userId);
 };
 

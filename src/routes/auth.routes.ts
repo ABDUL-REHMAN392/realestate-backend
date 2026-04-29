@@ -6,6 +6,7 @@ import {
   refreshAccessToken,
   logout,
   changePassword,
+  oauthLogin,
 } from "../controllers/auth.controllers";
 
 import { protect } from "../middlewares/auth.middlewares";
@@ -23,6 +24,9 @@ const router = Router();
 router.post("/register", validate(registerSchema), register);
 router.post("/login", validate(loginSchema), login);
 router.post("/refresh", refreshAccessToken);
+
+// POST /api/v1/auth/oauth  — NextAuth callback
+router.post("/oauth", oauthLogin);
 
 // =============================================
 // PROTECTED Routes

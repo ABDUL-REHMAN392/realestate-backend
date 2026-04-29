@@ -38,7 +38,7 @@ export const updateMe = catchAsync(
     }
 
     const user = await userService.updateProfile(String(req.user!._id), {
-      name: req.body.name,
+      name:  req.body.name,
       phone: req.body.phone,
     });
 
@@ -49,7 +49,8 @@ export const updateMe = catchAsync(
 // =============================================
 // DELETE MY ACCOUNT
 // DELETE /api/v1/users/me
-// Body: { "password": "yourPassword" }
+// Normal user → Body: { "password": "yourPassword" }
+// OAuth user  → Body: {} (password nahi chahiye)
 // =============================================
 export const deleteMe = catchAsync(
   async (
@@ -57,14 +58,8 @@ export const deleteMe = catchAsync(
     res: Response,
     _next: NextFunction,
   ): Promise<void> => {
+    // password optional hai — service mein handle hoga
     const { password } = req.body;
-
-    if (!password) {
-      throw new AppError(
-        "Please provide your password to confirm account deletion",
-        400,
-      );
-    }
 
     await userService.deleteAccount(String(req.user!._id), password);
 
@@ -72,15 +67,11 @@ export const deleteMe = catchAsync(
     clearRefreshTokenCookie(res);
     res.clearCookie("accessToken", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure:   process.env.NODE_ENV === "production",
       sameSite: "strict",
     });
 
-    sendSuccess(
-      res,
-      null,
-      "Account deleted successfully",
-    );
+    sendSuccess(res, null, "Account deleted successfully");
   },
 );
 
@@ -97,7 +88,7 @@ export const uploadAvatar = catchAsync(
     if (!req.file) throw new AppError("No image was uploaded", 400);
 
     const file = req.file as Express.Multer.File & {
-      path: string;
+      path:     string;
       filename: string;
     };
 
@@ -137,13 +128,12 @@ export const getAllUsers = catchAsync(
     _next: NextFunction,
   ): Promise<void> => {
     const result = await userService.getAllUsers({
-      page: Number(req.query.page) || 1,
-      limit: Number(req.query.limit) || 20,
-      role: req.query.role as string,
-      isActive:
-        req.query.isActive !== undefined
-          ? req.query.isActive === "true"
-          : undefined,
+      page:     Number(req.query.page)  || 1,
+      limit:    Number(req.query.limit) || 20,
+      role:     req.query.role as string,
+      isActive: req.query.isActive !== undefined
+        ? req.query.isActive === "true"
+        : undefined,
     });
 
     sendPaginated(res, result.data, result.total, result.page, result.limit);
@@ -186,9 +176,7 @@ export const toggleUserStatus = catchAsync(
     sendSuccess(
       res,
       { user },
-      isActive
-        ? "Account activated successfully"
-        : "Account suspended successfully",
+      isActive ? "Account activated successfully" : "Account suspended successfully",
     );
   },
 );
