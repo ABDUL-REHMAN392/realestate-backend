@@ -39,7 +39,6 @@ export const getOrCreateConversation = async (
         populate: { path: "sender", select: "name photo" },
       });
 
-  // 1. Pehle dhundo
   let conversation = await populate(
     Conversation.findOne({
       participants: { $all: sorted, $size: 2 },
@@ -47,7 +46,6 @@ export const getOrCreateConversation = async (
     }),
   ).lean<IConversation>();
 
-  // 2. Na mile toh banao
   if (!conversation) {
     const created = await Conversation.create({
       participants: sorted,
@@ -67,6 +65,7 @@ export const getOrCreateConversation = async (
 
   return conversation;
 };
+
 // =============================================
 // GET MY CONVERSATIONS — inbox list
 // =============================================
@@ -99,7 +98,7 @@ export const getMyConversations = async (
 
 // =============================================
 // GET MESSAGES in a conversation — paginated
-// Oldest first (for chat UI scroll)
+// ✅ replyTo populated with sender name
 // =============================================
 export const getMessages = async (
   conversationId: string,
@@ -111,8 +110,7 @@ export const getMessages = async (
     throw new AppError("Invalid conversation ID", 400);
   }
 
-  const conv =
-    await Conversation.findById(conversationId).lean<IConversation>();
+  const conv = await Conversation.findById(conversationId).lean<IConversation>();
   if (!conv) throw new AppError("Conversation not found", 404);
 
   const isParticipant = conv.participants.some((p) => p.toString() === userId);
@@ -125,6 +123,11 @@ export const getMessages = async (
   const [data, total] = await Promise.all([
     Message.find(filter)
       .populate("sender", "name photo role")
+      .populate({
+        path: "replyTo",
+        select: "text file messageType sender",
+        populate: { path: "sender", select: "name" },
+      })
       .sort({ createdAt: 1 })
       .skip(skip)
       .limit(limit)
@@ -137,7 +140,6 @@ export const getMessages = async (
 
 // =============================================
 // SEND MESSAGE — REST fallback
-// Real-time path is via Socket.io
 // =============================================
 export const sendMessage = async (
   conversationId: string,
@@ -157,14 +159,12 @@ export const sendMessage = async (
   if (!isParticipant)
     throw new AppError("Access denied to this conversation", 403);
 
-  // Save message
   const message = await Message.create({
     conversation: conversationId,
     sender: senderId,
     text: text.trim(),
   });
 
-  // Update conversation meta — unread for the OTHER participant
   const otherId = conv.participants
     .find((p) => p.toString() !== senderId)
     ?.toString();
@@ -185,6 +185,11 @@ export const sendMessage = async (
 
   const populated = await Message.findById(message._id)
     .populate("sender", "name photo role")
+    .populate({
+      path: "replyTo",
+      select: "text file messageType sender",
+      populate: { path: "sender", select: "name" },
+    })
     .lean<IMessage>();
 
   return populated!;
@@ -209,7 +214,6 @@ export const markAsRead = async (
 
   const now = new Date();
 
-  // Mark all unread messages from the OTHER person as read
   await Message.updateMany(
     {
       conversation: new mongoose.Types.ObjectId(conversationId),
@@ -219,13 +223,13 @@ export const markAsRead = async (
     { $set: { isRead: true, readAt: now } },
   );
 
-  // Reset this user's unread count to 0
   await Conversation.findByIdAndUpdate(conversationId, {
     $set: { [`unreadCount.${userId}`]: 0 },
   });
 };
+
 // =============================================
-// EDIT MESSAGE — sender only
+// EDIT MESSAGE
 // =============================================
 export const editMessage = async (
   messageId: string,
@@ -251,16 +255,11 @@ export const editMessage = async (
     throw new AppError("You can only edit your own messages", 403);
   }
 
-  // 1 hour window
   const oneHour = 60 * 60 * 1000;
   if (Date.now() - message.createdAt.getTime() > oneHour) {
-    throw new AppError(
-      "Messages can only be edited within 1 hour of sending",
-      400,
-    );
+    throw new AppError("Messages can only be edited within 1 hour of sending", 400);
   }
 
-  // Update
   message.text = newText.trim();
   message.isEdited = true;
   message.editedAt = new Date();
@@ -268,13 +267,18 @@ export const editMessage = async (
 
   const populated = await Message.findById(message._id)
     .populate("sender", "name photo role")
+    .populate({
+      path: "replyTo",
+      select: "text file messageType sender",
+      populate: { path: "sender", select: "name" },
+    })
     .lean<IMessage>();
 
   return populated!;
 };
 
 // =============================================
-// DELETE MESSAGE — sender only, within 5 min
+// DELETE MESSAGE
 // =============================================
 export const deleteMessage = async (
   messageId: string,
@@ -293,10 +297,7 @@ export const deleteMessage = async (
 
   const oneHour = 60 * 60 * 1000;
   if (Date.now() - message.createdAt.getTime() > oneHour) {
-    throw new AppError(
-      "Messages can only be deleted within 1 hour of sending",
-      400,
-    );
+    throw new AppError("Messages can only be deleted within 1 hour of sending", 400);
   }
 
   await message.deleteOne();
