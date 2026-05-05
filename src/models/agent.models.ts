@@ -6,21 +6,42 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IAgent extends Document {
   _id: mongoose.Types.ObjectId;
   user: mongoose.Types.ObjectId; // ref: User
+
+  // ── Application status ──────────────────────
+  applicationStatus: "pending" | "approved" | "rejected";
+  rejectionReason?: string; // Admin fills this when rejecting
+
+  // ── Documents (Cloudinary URLs) ─────────────
+  passportPhoto?: string;
+  passportPhotoPublicId?: string;
+  cnicFront?: string;
+  cnicFrontPublicId?: string;
+  cnicBack?: string;
+  cnicBackPublicId?: string;
+  utilityBill?: string;
+  utilityBillPublicId?: string;
+
+  // ── Profile info ────────────────────────────
   bio: string;
-  experience: number; // years
-  licenseNumber: string;
+  experience: number;
+  licenseNumber: string; // auto-generated — GF-YYYY-NNNNN
   agencyName?: string;
   city: string;
-  specializations: string[]; // ["DHA", "Bahria", "Gulberg"]
-  languages: string[]; // ["Urdu", "English"]
+  specializations: string[];
+  languages: string[];
   whatsapp?: string;
   website?: string;
-  isVerified: boolean; // admin approves
+
+  // ── Admin flag (set when applicationStatus=approved) ─
+  isVerified: boolean;
+
+  // ── Stats (auto-calculated) ─────────────────
   avgRating: number;
   totalReviews: number;
-  responseRate: number; // 0-100 percent
-  avgResponseTime: number; // minutes
-  totalListings: number; // cached count
+  responseRate: number;
+  avgResponseTime: number;
+  totalListings: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,8 +52,32 @@ const agentSchema = new Schema<IAgent>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: [true, "User reference is required"],
-      unique: true, 
+      unique: true,
     },
+
+    // ── Application status ─────────────────────
+    applicationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    // ── Documents ──────────────────────────────
+    passportPhoto:          { type: String, default: null },
+    passportPhotoPublicId:  { type: String, select: false, default: null },
+    cnicFront:              { type: String, default: null },
+    cnicFrontPublicId:      { type: String, select: false, default: null },
+    cnicBack:               { type: String, default: null },
+    cnicBackPublicId:       { type: String, select: false, default: null },
+    utilityBill:            { type: String, default: null },
+    utilityBillPublicId:    { type: String, select: false, default: null },
+
+    // ── Profile ────────────────────────────────
     bio: {
       type: String,
       required: [true, "Bio is required"],
@@ -52,11 +97,7 @@ const agentSchema = new Schema<IAgent>(
       trim: true,
       unique: true,
     },
-    agencyName: {
-      type: String,
-      trim: true,
-      default: null,
-    },
+    agencyName: { type: String, trim: true, default: null },
     city: {
       type: String,
       required: [true, "City is required"],
@@ -78,29 +119,18 @@ const agentSchema = new Schema<IAgent>(
         message: "Cannot exceed 10 languages",
       },
     },
-    whatsapp: {
-      type: String,
-      trim: true,
-      default: null,
-    },
-    website: {
-      type: String,
-      trim: true,
-      default: null,
-    },
+    whatsapp: { type: String, trim: true, default: null },
+    website:  { type: String, trim: true, default: null },
 
-    // Admin controls this
-    isVerified: {
-      type: Boolean,
-      default: false,
-    },
+    // Admin controls this — synced with applicationStatus
+    isVerified: { type: Boolean, default: false },
 
-    // Auto-calculated fields
-    avgRating: { type: Number, default: 0, min: 0, max: 5 },
-    totalReviews: { type: Number, default: 0 },
-    responseRate: { type: Number, default: 0, min: 0, max: 100 },
-    avgResponseTime: { type: Number, default: 0 }, // minutes
-    totalListings: { type: Number, default: 0 },
+    // Auto-calculated
+    avgRating:       { type: Number, default: 0, min: 0, max: 5 },
+    totalReviews:    { type: Number, default: 0 },
+    responseRate:    { type: Number, default: 0, min: 0, max: 100 },
+    avgResponseTime: { type: Number, default: 0 },
+    totalListings:   { type: Number, default: 0 },
   },
   { timestamps: true },
 );
@@ -110,6 +140,7 @@ const agentSchema = new Schema<IAgent>(
 // =============================================
 agentSchema.index({ city: 1 });
 agentSchema.index({ isVerified: 1 });
+agentSchema.index({ applicationStatus: 1 });
 agentSchema.index({ avgRating: -1 });
 agentSchema.index({ city: 1, isVerified: 1, avgRating: -1 });
 
